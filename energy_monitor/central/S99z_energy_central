@@ -1,0 +1,63 @@
+#!/bin/sh
+
+APP_DIR="/root/energy_monitor/central"
+DAEMON="/usr/bin/lua"
+PID_FILE="/run/energy_central.pid"
+
+setup_lua_path() {
+    if [ -r /etc/profile.d/lua_path.sh ]; then
+        . /etc/profile.d/lua_path.sh
+    fi
+    if [ -z "$LUA_PATH" ]; then
+        for dir in /run/oc2/lib/lua /mnt/*/lib/lua; do
+            if [ -d "$dir" ]; then
+                LUA_PATH="$dir/?.lua;$dir/?/init.lua;;"
+                export LUA_PATH
+                break
+            fi
+        done
+    fi
+}
+
+start() {
+    [ -f "$APP_DIR/main.lua" ] || return 0
+    printf 'Starting energy central: '
+    setup_lua_path
+    start-stop-daemon -b -m -S -q -p "$PID_FILE" -x "$DAEMON" -- "$APP_DIR/main.lua"
+    status=$?
+    if [ "$status" -eq 0 ]; then
+        echo "OK"
+    else
+        echo "FAIL"
+    fi
+    return "$status"
+}
+
+stop() {
+    printf 'Stopping energy central: '
+    start-stop-daemon -K -q -p "$PID_FILE"
+    status=$?
+    if [ "$status" -eq 0 ]; then
+        rm -f "$PID_FILE"
+        echo "OK"
+    else
+        echo "FAIL"
+    fi
+    return "$status"
+}
+
+restart() {
+    stop
+    sleep 2
+    start
+}
+
+case "$1" in
+    start|stop|restart)
+        "$1";;
+    reload)
+        restart;;
+    *)
+        echo "Usage: $0 {start|stop|restart|reload}"
+        exit 1
+esac
